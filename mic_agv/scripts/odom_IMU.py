@@ -16,10 +16,6 @@ class DiffTf:
     def __init__(self):
     #############################################################################
         rospy.init_node("diff_tf",anonymous=True)
-        # rospy.init_node("diff_tf")
-        # self.nodename = rospy.get_name()
-        # rospy.loginfo("-I- %s started" % self.nodename)
-        
         #### parameters #######
         self.rate = rospy.get_param('~rate',10.0)  # the rate at which to publish the transform
         self.ticks_meter_left = float(rospy.get_param('ticks_meter_left', 1698))   #The number of wheel encoder ticks per meter of travel
@@ -99,8 +95,7 @@ class DiffTf:
             # calculate velocities
             self.dx = d / elapsed
             self.dr = th 
-           
-             
+
             if (d != 0):
                 # calculate distance traveled in x and y
                 x = cos( th ) * d
@@ -125,7 +120,6 @@ class DiffTf:
                 self.base_frame_id,
                 self.odom_frame_id
                 )
-            
             odom = Odometry()
             odom.header.stamp = now
             odom.header.frame_id = self.odom_frame_id
@@ -168,7 +162,6 @@ class DiffTf:
         self.prev_rencoder = enc
 
 #############################################################################
-#############################################################################
     def imuCallback(self,imu_data):
         imu = imu_data.data
         self.prev_angZ = imu/10
@@ -180,4 +173,3 @@ if __name__ == '__main__':
         diffTf.spin()
     except rospy.ROSInterruptException:
         pass
-

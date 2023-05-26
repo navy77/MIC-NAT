@@ -8,7 +8,7 @@ from geometry_msgs.msg import Pose, Point, Quaternion
 import csv
 import paho.mqtt.subscribe as subscribe
 import paho.mqtt.client as mqtt
-host = '192.168.1.250'
+host = '192.168.1.101'
 # host = '192.168.1.2'
 port = 1883
 topic = '/ros_mqtt'

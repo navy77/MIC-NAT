@@ -54,5 +54,7 @@
   
   <!-- odom -->
   <node name="diff_tf" pkg="mic_agv" type="odom_IMU.py" />
-  <!-- <node name="diff_drive" pkg="mic_agv" type="odom.py" /> -->
+  
+  <!-- semi-auto -->
+  <node name="semi_running" pkg="mic_agv" type="nat.py" />
 </launch>
