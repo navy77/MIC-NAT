@@ -44,11 +44,13 @@ class Mic_agv:
         self.vel_list =[]
         self.vel_t_list =[]
         # PID
-        self.kp = 1
+        self.kp = 10
         self.ki = 1
         self.kd = 1
         self.prv_err_list = [0,0,0,0]
         self.integral_list = [0,0,0,0]
+        self.max_pwm = 250
+        self.min_pwm = -250
 
     def cb_imu_value(self,msg):
         self.imu = msg.data
@@ -92,26 +94,44 @@ class Mic_agv:
             self.vel_list = np.round(self.dist_list/elapsed,2)
             self.prv_enc_list = self.enc_list
 
+            rospy.loginfo(self.vel_list)
             # print(self.vel_list)
             # print(self.prv_enc_list)
         
     def pid_calculate(self):
         self.vel_calculate()
-        
+        pwm = []
         err_list = np.array(self.vel_t_list) - np.array(self.vel_list)
-        # # Proportional term
-        # p = self.kp * err_list
+        # Proportional term
+        p = self.kp * err_list
         # # Integral term
-        # self.integral_list = np.array(self.integral_list) + np.array(err_list)
-        # i = self.ki * self.integral_list
-        # # Derivative term
-        # derivative = err_list - self.prv_err_list
-        # d = self.kd * derivative
+        self.integral_list = np.array(self.integral_list) + np.array(err_list)
+        i = self.ki * self.integral_list
+        # Derivative term
+        derivative = err_list - self.prv_err_list
+        d = self.kd * derivative
+        pwm = p + i + d
 
-        # self.pwm_list = p + i + d
-        # self.prv_err_list = err_list
+        for i in range(4):
+            if self.vel_t_list[i] == 0:
+                pwm[i] = 0
 
-        print(err_list)
+        for i in range(4):
+            if pwm[i]>self.max_pwm:
+                pwm[i] = self.max_pwm
+
+        for i in range(4):
+            if pwm[i]<self.min_pwm:
+                pwm[i] = self.min_pwm   
+        
+        self.pwm_list = Float32MultiArray()
+        self.pwm_list.data = pwm
+
+        self.prv_err_list = err_list
+
+        self.pwm_value.publish(self.pwm_list)
+        # rospy.loginfo(self.pwm_list)
+      
         # print(self.vel_t_list)
         # print(self.vel_list)
         
