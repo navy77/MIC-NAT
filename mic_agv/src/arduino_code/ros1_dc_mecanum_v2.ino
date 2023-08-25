@@ -24,10 +24,10 @@ SoftwareSerial mySerial(17, 18); // (RX,TX)
 DFRobot_WT61PC IMU_sensor(&mySerial);
 // ##################################################################//
 // Motor control --> [0]->front-l , [1]->front-r ,[2]->rear-l ,[3]->rear-r
-const uint8_t DIR[] = {4, 46, 6, 42};
-const uint8_t PWM[] = {5, 45, 7, 39};
-const uint8_t EA[] = {8, 37, 10, 35};
-const uint8_t EB[] = {9, 38, 11, 36};
+const uint8_t DIR[] = {4,46,6,42};
+const uint8_t PWM[] = {5,45,7,39};
+const uint8_t EA[] = {8,37,10,35};
+const uint8_t EB[] = {9,38,11,36};
 
 long int enc_count_0;
 long int enc_count_1;
@@ -43,7 +43,7 @@ int pwm_value[4];
 int dir_motor[4];
 
 // IR sensor
-const uint8_t IR[] = {13, 14};
+const uint8_t IR[] = {14, 15};
 
 // ##################################################################//
 ros::NodeHandle nh;

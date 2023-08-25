@@ -300,10 +300,10 @@ void pid(float vel_0,float vel_1,float vel_2,float vel_3)
     if(vel[i] == 0){
       pwm_value[i]=0;
     }
-    if(vel[i] > 255){
+    if(pwm_value[i] > 255){
       pwm_value[i]=255;
     }
-    if(vel[i] < -255){
+    if(pwm_value[i] < -255){
       pwm_value[i]=-255;
     }
   }
