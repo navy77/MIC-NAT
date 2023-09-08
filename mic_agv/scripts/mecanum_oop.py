@@ -88,7 +88,7 @@ class Mic_agv:
             self.then = now
             elapsed = elapsed.to_sec()
             dis_front = (np.array(self.enc_list[0:2])-np.array(self.prv_enc_list[0:2])) / self.encoder_tick_0
-            dis_rear = (np.array(self.enc_list[2:4])-np.array(self.prv_enc_list[2:4])) / self.encoder_tick_0
+            dis_rear = (np.array(self.enc_list[2:4])-np.array(self.prv_enc_list[2:4])) / self.encoder_tick_1
             self.dist_list = np.concatenate((dis_front,dis_rear))
 
             self.vel_list = np.round(self.dist_list/elapsed,2)
