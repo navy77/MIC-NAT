@@ -1,164 +1,172 @@
 #!/usr/bin/env python3
 import rospy
-from std_msgs.msg import Int32,Float32,Float32MultiArray,Int32MultiArray
-from geometry_msgs.msg import Twist
-import time
-from rosserial_arduino.srv._Test import *
-import numpy as np
+from math import sin,cos,pi
+from geometry_msgs.msg import Quaternion
+from nav_msgs.msg import Odometry
+from tf.broadcaster import TransformBroadcaster
+from std_msgs.msg import Int32,Float32,Int32MultiArray,Float32MultiArray
+from tf.transformations import quaternion_from_euler, euler_from_quaternion
 
-class Mic_agv:
+class Mic_ros:
     def __init__(self):
         rospy.init_node("agv_mecanum",anonymous=True)
-        self.rate = 10
-        self.pwm_value = rospy.Publisher('/pwm_data',Float32MultiArray,queue_size=10)
-        self.cmd_value = rospy.Subscriber('/cmd_vel',Twist,self.cb_cmd_vel)
+        self.rate = 2
         self.enc_value = rospy.Subscriber('/enc_data',Int32MultiArray,self.cb_enc_value)
-        self.ir_value = rospy.Subscriber('/ir_data',Int32MultiArray,self.cb_ir_value)
+        self.vel_value = rospy.Subscriber('/vel_data',Float32MultiArray,self.cb_vel_value)
+        self.dis_value = rospy.Subscriber('/dis_data',Float32MultiArray,self.cb_dis_value)
         self.imu_value = rospy.Subscriber('/imu_data',Float32,self.cb_imu_value)
-        # cmd_vel
-        self.vel_x,self.vel_y,self.vel_z = 0,0,0
+        
+        self.odomPub = rospy.Publisher("odom", Odometry, queue_size=10)
+        self.odomBroadcaster = TransformBroadcaster()
+        
         # mecanum wheel
         self.lx = 0.3
         self.ly = 0.3
         self.wheel_diameter = 0.127
-        self.encoder_tick_0,self.encoder_tick_1 = 2835,3150
+        self.encoder_tick_0,self.encoder_tick_1 = 902,1003
         # encoder data
-        self.enc_list =[]
-        self.prv_enc_list =[0,0,0,0]
-        # self.enc_0,self.enc_1,self.enc_2,self.enc_3 = 0,0,0,0
-        # self.prv_enc_0,self.prv_enc_1,self.prv_enc_2,self.prv_enc_3 = 0,0,0,0
-        # pwm data
-        self.pwm_list = []
-        # self.pwm_0,self.pwm_1,self.pwm_2,self.pwm_3 = 0,0,0,0
-        # infrared data
-        self.ir_list = []
-        # self.ir_0,self.ir_1 = 0,0
-        # vel
+        self.enc_0 = 0
+        self.enc_1 = 0
+        self.enc_2 = 0
+        self.enc_3 = 0
+
+        self.prv_enc_0 = 0
+        self.prv_enc_1 = 0
+        self.prv_enc_2 = 0
+        self.prv_enc_3 = 0
+
+        self.vel_0 = 0
+        self.vel_1 = 0
+        self.vel_2 = 0
+        self.vel_3 = 0
+
+        self.dis_0 = 0
+        self.dis_1 = 0
+        self.dis_2 = 0
+        self.dis_3 = 0
+
+        self.th = 0 
+        self.imu = 0 # rad/s
+        # odom
+        self.th = 0 
+        self.x = 0
+        self.y = 0
+        self.base_frame_id = "base_link"
+        self.odom_frame_id = "odom"
+
         self.t_delta = rospy.Duration(1.0/self.rate)
         self.t_next = rospy.Time.now() + self.t_delta
         self.then = rospy.Time.now()
-        self.vel_0,self.vel_1,self.vel_2,self.vel_3 = 0,0,0,0
-        self.th = 0 
-        self.imu = 0 # rad/s
-        self.dist_list = []
-        self.vel_list =[]
-        self.vel_t_list =[]
-        # PID
-        self.kp = 10
-        self.ki = 1
-        self.kd = 1
-        self.prv_err_list = [0,0,0,0]
-        self.integral_list = [0,0,0,0]
-        self.max_pwm = 250
-        self.min_pwm = -250
+
+        self.pos_x  = 0
+        self.pos_y  = 0
+
+        self.vel_x = 0
+        self.vel_y = 0
+        self.vel_z = 0
+    
+    def cb_enc_value(self,msg):
+        self.enc_0 = msg.data[0]
+        self.enc_1 = msg.data[1]
+        self.enc_2 = msg.data[2]
+        self.enc_3 = msg.data[3]
+
+    def cb_vel_value(self,msg):
+        self.vel_0 = msg.data[0]
+        self.vel_1 = msg.data[1]
+        self.vel_2 = msg.data[2]
+        self.vel_3 = msg.data[3]
+
+    def cb_dis_value(self,msg):
+        self.dis_0 = msg.data[0]
+        self.dis_1 = msg.data[1]
+        self.dis_2 = msg.data[2]
+        self.dis_3 = msg.data[3]
 
     def cb_imu_value(self,msg):
-        self.imu = msg.data
+        self.imu = msg.data # unit rad/s
 
-    def cb_cmd_vel(self,Twist):
-        self.vel_x = Twist.linear.x
-        self.vel_y = Twist.linear.y
-        self.vel_z = Twist.angular.z
-    
-    def cb_ir_value(self,msg):
-        self.ir_list = msg.data
-        # self.ir_0 = msg.data[0]
-        # self.ir_1 = msg.data[1]
-
-    def cmd_cal(self):
-        if self.vel_x == 0 and self.vel_y == 0 and self.vel_z == 0:
-            self.vel_list = [0,0,0,0]
-            self.vel_t_list = [0,0,0,0]
-            self.pwm_list = [0,0,0,0]
-        else:    
-            vel_t_0 = self.vel_x-self.vel_y-(self.lx+self.ly)*self.vel_z
-            vel_t_1 = self.vel_x+self.vel_y+(self.lx+self.ly)*self.vel_z 
-            vel_t_2 = self.vel_x+self.vel_y-(self.lx+self.ly)*self.vel_z
-            vel_t_3 = self.vel_x-self.vel_y+(self.lx+self.ly)*self.vel_z
-            self.vel_t_list = [vel_t_0,vel_t_1,vel_t_2,vel_t_3]
-        # print(self.vel_t_list)
-
-    def low_pass_filter(self):
-        pass
-
-    def vel_calculate(self):
+    def update(self):
+        
         now = rospy.Time.now()
         if now > self.t_next:
             elapsed = now - self.then
             self.then = now
             elapsed = elapsed.to_sec()
-            dis_front = (np.array(self.enc_list[0:2])-np.array(self.prv_enc_list[0:2])) / self.encoder_tick_0
-            dis_rear = (np.array(self.enc_list[2:4])-np.array(self.prv_enc_list[2:4])) / self.encoder_tick_1
-            self.dist_list = np.concatenate((dis_front,dis_rear))
 
-            self.vel_list = np.round(self.dist_list/elapsed,2)
-            self.prv_enc_list = self.enc_list
+            if self.enc_0 == None:
+                d_0 = 0
+                d_1 = 0
+                d_2 = 0
+                d_3 = 0
+            else:
+                # d_0 = (self.enc_0-self.prv_enc_0)/self.encoder_tick_0
+                # d_1 = (self.enc_1-self.prv_enc_1)/self.encoder_tick_0
+                # d_2 = (self.enc_2-self.prv_enc_2)/self.encoder_tick_1
+                # d_3 = (self.enc_3-self.prv_enc_3)/self.encoder_tick_1
+                d_0 = self.dis_0
+                d_1 = self.dis_1
+                d_2 = self.dis_2
+                d_3 = self.dis_3
 
-            rospy.loginfo(self.vel_list)
-            # print(self.vel_list)
-            # print(self.prv_enc_list)
-        
-    def pid_calculate(self):
-        self.vel_calculate()
-        pwm = []
-        err_list = np.array(self.vel_t_list) - np.array(self.vel_list)
-        # Proportional term
-        p = self.kp * err_list
-        # # Integral term
-        self.integral_list = np.array(self.integral_list) + np.array(err_list)
-        i = self.ki * self.integral_list
-        # Derivative term
-        derivative = err_list - self.prv_err_list
-        d = self.kd * derivative
-        pwm = p + i + d
+            self.prv_enc_0 = self.enc_0
+            self.prv_enc_1 = self.enc_1
+            self.prv_enc_2 = self.enc_2
+            self.prv_enc_3 = self.enc_3
 
-        for i in range(4):
-            if self.vel_t_list[i] == 0:
-                pwm[i] = 0
+            th = self.imu
+            
+            deltaXTravel = (d_0 + d_1 + d_2 + d_3)/4.0
+            deltaYTravel = (-d_0 + d_1 + d_2 - d_3)/4.0
 
-        for i in range(4):
-            if pwm[i]>self.max_pwm:
-                pwm[i] = self.max_pwm
+            self.vel_x = (self.dis_0+self.dis_1+self.dis_2+self.dis_3)/4
+            self.vel_y = (-self.dis_0+self.dis_1+self.dis_2-self.dis_3)/4
 
-        for i in range(4):
-            if pwm[i]<self.min_pwm:
-                pwm[i] = self.min_pwm   
-        
-        self.pwm_list = Float32MultiArray()
-        self.pwm_list.data = pwm
+            self.x += deltaXTravel*cos(th) - deltaYTravel*sin(th)
+            self.y += deltaYTravel*cos(th) + deltaXTravel*sin(th)
+            self.th += th 
 
-        self.prv_err_list = err_list
+            # deltaXTravel = (frontLeftTravel + frontRightTravel + rearLeftTravel + rearRightTravel) / 4.0
+            # deltaYTravel = (-frontLeftTravel + frontRightTravel + rearLeftTravel - rearRightTravel) / 4.0
+            # deltaTheta = (-frontLeftTravel + frontRightTravel - rearLeftTravel + rearRightTravel) / (2 * (self.wheelSeparation + self.wheelSeparationLength))
+            print(deltaXTravel,"::",deltaYTravel,"::",th,"::",self.x,"::",self.y,"::",self.th)
+            
+            quaternion = Quaternion()
+            quaternion.x = 0.0
+            quaternion.y = 0.0
+            quaternion.z = sin(self.th/2)
+            quaternion.w = cos( self.th / 2 )
+            self.odomBroadcaster.sendTransform(
+                (self.x,self.y,0),
+                (quaternion.x,quaternion.y,quaternion.z,quaternion.w),
+                rospy.Time.now(),
+                self.base_frame_id,
+                self.odom_frame_id
+            )
+            odom = Odometry()
+            odom.header.stamp = now
+            odom.header.frame_id = self.odom_frame_id
+            odom.child_frame_id = self.base_frame_id
+            odom.pose.pose.position.x = self.x
+            odom.pose.pose.position.y = self.y
+            odom.pose.pose.position.z = 0
+            odom.pose.pose.orientation = quaternion
 
-        self.pwm_value.publish(self.pwm_list)
-        # rospy.loginfo(self.pwm_list)
-      
-        # print(self.vel_t_list)
-        # print(self.vel_list)
-        
-    def cb_enc_value(self,msg):
-        self.enc_list = msg.data
-        # self.enc_0 = msg.data[0]
-        # self.enc_1 = msg.data[1]
-        # self.enc_2 = msg.data[2]
-        # self.enc_3 = msg.data[3]
-
-    def update(self):
-        self.cmd_cal()
-        self.pid_calculate()
-        # print(self.vel_list)
-        # print(self.vel_t_list)
+            odom.twist.twist.linear.x = self.vel_x
+            odom.twist.twist.linear.y = self.vel_y
+            odom.twist.twist.angular.z = self.imu
+            self.odomPub.publish(odom)
 
     def spin(self):
         r = rospy.Rate(self.rate)
-        
+
         while not rospy.is_shutdown():
-            # rospy.loginfo("%s"+":"+"%s"+":"+"%s"+":"+"%s",self.enc_0,self.enc_1,self.enc_2,self.enc_3)
             self.update()
             r.sleep()
 
 if __name__ == '__main__':
     try:
-        mic = Mic_agv()
+        mic = Mic_ros()
         mic.spin()
     except rospy.ROSInterruptException:
         pass
